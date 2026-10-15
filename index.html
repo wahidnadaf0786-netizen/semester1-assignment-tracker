@@ -1,0 +1,543 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Semester 1 Assignment Tracker</title>
+
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #080d18;
+      color: #e8eefc;
+    }
+
+    .container {
+      width: min(100% - 28px, 1000px);
+      margin: 35px auto;
+    }
+
+    .brand {
+      color: #60a5fa;
+      font-weight: bold;
+      letter-spacing: 2px;
+      font-size: 13px;
+    }
+
+    h1 { font-size: clamp(25px, 5vw, 38px); margin-bottom: 8px; }
+    .muted { color: #9aa8bf; line-height: 1.6; }
+
+    .panel, .subject {
+      background: #111a2b;
+      border: 1px solid #26344c;
+      border-radius: 14px;
+      padding: 22px;
+      margin-top: 20px;
+    }
+
+    input, button {
+      width: 100%;
+      padding: 13px;
+      border-radius: 8px;
+      font-size: 15px;
+    }
+
+    input {
+      background: #080d18;
+      border: 1px solid #34435e;
+      color: white;
+      margin: 7px 0 14px;
+    }
+
+    button {
+      border: 0;
+      background: #2563eb;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+      margin: 5px 0;
+    }
+
+    button:hover { background: #1d4ed8; }
+    button.secondary { background: #26344c; }
+    button.danger { background: #7f1d1d; }
+
+    .hidden { display: none !important; }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .topbar button { width: auto; padding: 10px 16px; }
+
+    .progress-track {
+      height: 10px;
+      background: #26344c;
+      border-radius: 20px;
+      overflow: hidden;
+      margin: 15px 0;
+    }
+
+    #progressBar {
+      height: 100%;
+      width: 0;
+      background: #38bdf8;
+      transition: width .2s;
+    }
+
+    #subjects {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 4px 16px;
+    }
+
+    .subject h3 { margin-top: 0; font-size: 17px; }
+
+    .task {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 0;
+      border-bottom: 1px solid #26344c;
+      line-height: 1.4;
+    }
+
+    .task:last-child { border-bottom: 0; }
+
+    .task input {
+      width: 19px;
+      height: 19px;
+      margin: 0;
+      flex-shrink: 0;
+      accent-color: #38bdf8;
+    }
+
+    .task.done span {
+      color: #7f91ac;
+      text-decoration: line-through;
+    }
+
+    #message {
+      color: #fca5a5;
+      font-size: 14px;
+      overflow-wrap: anywhere;
+    }
+
+    .success { color: #86efac !important; }
+    .small { font-size: 12px; }
+
+    @media (max-width: 480px) {
+      .container { margin: 22px auto; }
+      .panel, .subject { padding: 16px; }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="container">
+    <div class="brand">STUDENT PRODUCTIVITY</div>
+    <h1>Semester 1 Tracker</h1>
+    <p class="muted">Your assignments. Your progress. Synced across your devices.</p>
+
+    <!-- LOGIN AND REGISTRATION -->
+    <section id="authPanel" class="panel">
+      <h2 id="authTitle">Welcome back</h2>
+      <p class="muted" id="authDescription">
+        Sign in to access your assignment tracker.
+      </p>
+
+      <form id="authForm">
+        <label for="email">Email address</label>
+        <input id="email" type="email" autocomplete="email"
+               placeholder="you@example.com" required>
+
+        <label for="password">Password</label>
+        <input id="password" type="password"
+               autocomplete="current-password"
+               placeholder="At least 6 characters" minlength="6" required>
+
+        <button id="authButton" type="submit">Sign in</button>
+      </form>
+
+      <button id="toggleAuth" class="secondary" type="button">
+        Create a new account
+      </button>
+
+      <p id="message" role="status"></p>
+    </section>
+
+    <!-- TRACKER -->
+    <section id="trackerPanel" class="hidden">
+      <div class="panel">
+        <div class="topbar">
+          <div>
+            <div class="muted small">SIGNED IN AS</div>
+            <div id="userEmail"></div>
+          </div>
+          <button id="signOut" class="secondary">Sign out</button>
+        </div>
+
+        <h2>Your assignment progress</h2>
+        <h3 id="progressText">0 of 35 completed</h3>
+
+        <div class="progress-track">
+          <div id="progressBar"></div>
+        </div>
+
+        <p class="muted small" id="syncStatus">Connecting to cloud...</p>
+      </div>
+
+      <div id="subjects"></div>
+
+      <div class="panel">
+        <button id="resetButton" class="danger" type="button">
+          Reset all assignments
+        </button>
+        <p class="muted small">
+          Reset affects your saved progress for this account on all devices.
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <script type="module">
+    import {
+      initializeApp
+    } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+
+    import {
+      getAuth,
+      createUserWithEmailAndPassword,
+      signInWithEmailAndPassword,
+      onAuthStateChanged,
+      signOut
+    } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+
+    import {
+      getFirestore,
+      collection,
+      doc,
+      getDocs,
+      setDoc,
+      writeBatch,
+      onSnapshot
+    } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+
+    // STEP: Replace these placeholder values with your Firebase web config.
+    const firebaseConfig = {
+      apiKey: "PASTE_YOUR_API_KEY",
+      authDomain: "PASTE_YOUR_PROJECT_ID.firebaseapp.com",
+      projectId: "PASTE_YOUR_PROJECT_ID",
+      storageBucket: "PASTE_YOUR_STORAGE_BUCKET",
+      messagingSenderId: "PASTE_YOUR_SENDER_ID",
+      appId: "PASTE_YOUR_APP_ID"
+    };
+
+    const subjects = [
+      "C Programming",
+      "Software Engineering",
+      "Web Technology",
+      "Computer Architecture",
+      "UHV (Universal Human Values)",
+      "IKS (Indian Knowledge Systems)",
+      "Cyber Security in IoT"
+    ];
+
+    const authPanel = document.getElementById("authPanel");
+    const trackerPanel = document.getElementById("trackerPanel");
+    const authForm = document.getElementById("authForm");
+    const authTitle = document.getElementById("authTitle");
+    const authDescription = document.getElementById("authDescription");
+    const authButton = document.getElementById("authButton");
+    const toggleAuth = document.getElementById("toggleAuth");
+    const message = document.getElementById("message");
+    const subjectsContainer = document.getElementById("subjects");
+    const syncStatus = document.getElementById("syncStatus");
+
+    let isRegistering = false;
+    let currentUser = null;
+    let unsubscribeTasks = null;
+    let tasksState = {};
+    let busy = false;
+
+    function showMessage(text, success = false) {
+      message.textContent = text;
+      message.classList.toggle("success", success);
+    }
+
+    function setAuthMode(registering) {
+      isRegistering = registering;
+      authTitle.textContent = registering ? "Create your account" : "Welcome back";
+      authDescription.textContent = registering
+        ? "Register once, then use the same account on both devices."
+        : "Sign in to access your assignment tracker.";
+      authButton.textContent = registering ? "Create account" : "Sign in";
+      toggleAuth.textContent = registering
+        ? "Already have an account? Sign in"
+        : "Create a new account";
+      document.getElementById("password").autocomplete =
+        registering ? "new-password" : "current-password";
+      showMessage("");
+    }
+
+    toggleAuth.addEventListener("click", () => {
+      setAuthMode(!isRegistering);
+    });
+
+    function getTaskId(subjectIndex, taskNumber) {
+      return `subject${subjectIndex + 1}_task${taskNumber}`;
+    }
+
+    function renderSubjects() {
+      subjectsContainer.replaceChildren();
+
+      subjects.forEach((subject, subjectIndex) => {
+        const card = document.createElement("article");
+        card.className = "subject";
+
+        const heading = document.createElement("h3");
+        heading.textContent = subject;
+        card.appendChild(heading);
+
+        for (let taskNumber = 1; taskNumber <= 5; taskNumber++) {
+          const taskId = getTaskId(subjectIndex, taskNumber);
+          const label = document.createElement("label");
+          label.className = "task";
+          label.classList.toggle("done", tasksState[taskId] === true);
+
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.checked = tasksState[taskId] === true;
+          checkbox.disabled = busy;
+
+          const span = document.createElement("span");
+          span.textContent = `Assignment ${taskNumber}`;
+
+          checkbox.addEventListener("change", async () => {
+            if (!currentUser) return;
+
+            const newValue = checkbox.checked;
+            tasksState[taskId] = newValue;
+            label.classList.toggle("done", newValue);
+            updateProgress();
+
+            checkbox.disabled = true;
+            syncStatus.textContent = "Saving to cloud...";
+
+            try {
+              await setDoc(
+                doc(db, "users", currentUser.uid, "tasks", taskId),
+                {
+                  subject,
+                  taskNumber,
+                  completed: newValue,
+                  updatedAt: new Date().toISOString()
+                },
+                { merge: true }
+              );
+              syncStatus.textContent = "Synced to cloud";
+            } catch (error) {
+              tasksState[taskId] = !newValue;
+              checkbox.checked = !newValue;
+              label.classList.toggle("done", !newValue);
+              updateProgress();
+              syncStatus.textContent = "Save failed. Check your connection.";
+              console.error(error);
+            } finally {
+              checkbox.disabled = false;
+            }
+          });
+
+          label.append(checkbox, span);
+          card.appendChild(label);
+        }
+
+        subjectsContainer.appendChild(card);
+      });
+
+      updateProgress();
+    }
+
+    function updateProgress() {
+      let completed = 0;
+      for (let s = 0; s < subjects.length; s++) {
+        for (let n = 1; n <= 5; n++) {
+          if (tasksState[getTaskId(s, n)] === true) completed++;
+        }
+      }
+
+      const percent = Math.round((completed / 35) * 100);
+      document.getElementById("progressText").textContent =
+        `${completed} of 35 completed (${percent}%)`;
+      document.getElementById("progressBar").style.width = `${percent}%`;
+    }
+
+    let app;
+    let auth;
+    let db;
+
+    try {
+      app = initializeApp(firebaseConfig);
+      auth = getAuth(app);
+      db = getFirestore(app);
+    } catch (error) {
+      showMessage("Firebase setup error. Check your Firebase configuration.");
+      console.error(error);
+    }
+
+    authForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!auth) return;
+
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+
+      authButton.disabled = true;
+      showMessage(isRegistering ? "Creating account..." : "Signing in...");
+
+      try {
+        if (isRegistering) {
+          await createUserWithEmailAndPassword(auth, email, password);
+        } else {
+          await signInWithEmailAndPassword(auth, email, password);
+        }
+        showMessage("");
+      } catch (error) {
+        const messages = {
+          "auth/email-already-in-use": "This email already has an account. Sign in instead.",
+          "auth/invalid-email": "Enter a valid email address.",
+          "auth/weak-password": "Choose a stronger password with at least 6 characters.",
+          "auth/invalid-credential": "Email or password is incorrect.",
+          "auth/network-request-failed": "Network error. Check your internet connection.",
+          "auth/operation-not-allowed": "Enable Email/Password sign-in in Firebase Authentication."
+        };
+        showMessage(messages[error.code] || error.message);
+      } finally {
+        authButton.disabled = false;
+      }
+    });
+
+    document.getElementById("signOut").addEventListener("click", async () => {
+      if (auth) await signOut(auth);
+    });
+
+    async function initializeUserTasks(user) {
+      const taskCollection = collection(db, "users", user.uid, "tasks");
+      const existing = await getDocs(taskCollection);
+
+      // Seed the 35 assignments only for a new account.
+      if (existing.empty) {
+        const batch = writeBatch(db);
+
+        subjects.forEach((subject, subjectIndex) => {
+          for (let taskNumber = 1; taskNumber <= 5; taskNumber++) {
+            const taskId = getTaskId(subjectIndex, taskNumber);
+            batch.set(doc(taskCollection, taskId), {
+              subject,
+              taskNumber,
+              completed: false
+            });
+          }
+        });
+
+        await batch.commit();
+      }
+    }
+
+    onAuthStateChanged(auth, async (user) => {
+      if (unsubscribeTasks) {
+        unsubscribeTasks();
+        unsubscribeTasks = null;
+      }
+
+      currentUser = user;
+      tasksState = {};
+
+      if (!user) {
+        authPanel.classList.remove("hidden");
+        trackerPanel.classList.add("hidden");
+        subjectsContainer.replaceChildren();
+        setAuthMode(false);
+        return;
+      }
+
+      authPanel.classList.add("hidden");
+      trackerPanel.classList.remove("hidden");
+      document.getElementById("userEmail").textContent = user.email || "";
+      syncStatus.textContent = "Loading assignments...";
+      renderSubjects();
+
+      try {
+        await initializeUserTasks(user);
+        if (currentUser?.uid !== user.uid) return;
+
+        unsubscribeTasks = onSnapshot(
+          collection(db, "users", user.uid, "tasks"),
+          (snapshot) => {
+            const updatedState = {};
+
+            snapshot.forEach((item) => {
+              updatedState[item.id] = item.data().completed === true;
+            });
+
+            tasksState = updatedState;
+            renderSubjects();
+            syncStatus.textContent = "Synced to cloud";
+          },
+          (error) => {
+            syncStatus.textContent = "Sync error: check Firestore security rules.";
+            console.error(error);
+          }
+        );
+      } catch (error) {
+        syncStatus.textContent =
+          "Could not load tasks. Check your Firebase setup and Firestore rules.";
+        console.error(error);
+      }
+    });
+
+    document.getElementById("resetButton").addEventListener("click", async () => {
+      if (!currentUser) return;
+
+      const confirmed = confirm(
+        "Reset all 35 assignments to incomplete? This changes progress on all devices."
+      );
+      if (!confirmed) return;
+
+      const button = document.getElementById("resetButton");
+      button.disabled = true;
+
+      try {
+        const batch = writeBatch(db);
+
+        subjects.forEach((subject, subjectIndex) => {
+          for (let taskNumber = 1; taskNumber <= 5; taskNumber++) {
+            const taskId = getTaskId(subjectIndex, taskNumber);
+            batch.set(
+              doc(db, "users", currentUser.uid, "tasks", taskId),
+              { subject, taskNumber, completed: false },
+              { merge: true }
+            );
+          }
+        });
+
+        await batch.commit();
+        syncStatus.textContent = "All assignments reset.";
+      } catch (error) {
+        syncStatus.textContent = "Reset failed. Check your connection and rules.";
+        console.error(error);
+      } finally {
+        button.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
